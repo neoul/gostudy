@@ -247,8 +247,10 @@ func main() {
 		v1 *User
 		v2 = new(User)
 		v3 struct{ Name string }
-		dv = DefaultValSet("Name=Ariel,Github=a8m,PString=pointer-value,Hit=10,Address=github.com/neoul")
+		// dv = DefaultValSet()
+		d = "Name=Ariel,Github=a8m,PString=pointer-value,Hit=10,Address=github.com/neoul"
 	)
+	dv := DefaultValSet(d)
 	Set(&v0, &dv)
 	v0.Friend["Boy"]=&Friend{FName: "friend1"}
 	fmt.Println("+++", v0, v0.Friend["Boy"])
