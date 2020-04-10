@@ -17,4 +17,4 @@
 package main
 
 // Generate rule to create the example structs:
-//go:generate go run ../../../github.com/openconfig/ygot/generator/generator.go -path=yang -output_file=object/example.go -package_name=example -generate_fakeroot -fakeroot_name=device yang/example.yang
+//go:generate go run ../../../github.com/openconfig/ygot/generator/generator.go -path=yang -output_file=object/example.go -package_name=object -generate_fakeroot -fakeroot_name=device yang/example.yang
