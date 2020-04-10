@@ -14,11 +14,12 @@
 
 // Binary uncompressed is an example package showing the usage of ygot for
 // an uncompressed schema.
-package main
+package main // import "github.com/neoul/gostudy/datablock/ydb2ygot"
 
 import (
 	"fmt"
-	"model/object"
+
+	"github.com/neoul/gostudy/datablock/model/object"
 
 	"github.com/openconfig/goyang/pkg/yang"
 	"github.com/openconfig/ygot/ytypes"
@@ -45,8 +46,8 @@ func init() {
 	for _, branch := range object.SchemaTree {
 		entries, _ := SchemaTree[branch.Name]
 		entries = append(entries, branch)
-		for key, leaf := range branch.Dir {
-
+		for _, leaf := range branch.Dir {
+			entries = append(entries, leaf)
 		}
 		SchemaTree[branch.Name] = entries
 		if branch.Annotation["schemapath"] == "/" {

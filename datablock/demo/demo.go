@@ -1,4 +1,4 @@
-package main // import "demo"
+package main // import "github.com/neoul/gostudy/datablock/demo"
 
 import (
 	"log"
