@@ -1,0 +1,18 @@
+a: 123
+b: 123
+c: 123.0
+d: !!float 123
+e: 123
+f: Yes
+g: Yes
+h: Yes we have No bananas
+mylist: 
+ - entry1
+ - entry2
+ - entry3
+picture: !!binary |
+ R0lGODdhDQAIAIAAAAAAANn
+ Z2SwAAAAADQAIAAACF4SDGQ
+ ar3xxbJ9p0qa7R0YxwzaFME
+ 1IAADs=
+ 

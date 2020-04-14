@@ -11,9 +11,10 @@ func main() {
 	db, close := ydb.Open("hello")
 	defer close()
 	// ydb.SetLog(ydb.LogDebug)
+
 	err := db.Connect("uss://test", "pub")
 	if err != nil {
-		log.Println(err)
+		log.Fatalln(err)
 	}
 	go db.Receive()
 	<-time.After(time.Second * 1)
@@ -29,6 +30,6 @@ func main() {
 
 	err = db.Disconnect("uss://test")
 	if err != nil {
-		log.Println(err)
+		log.Fatalln(err)
 	}
 }
