@@ -6,7 +6,9 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 
+	"github.com/kylelemons/godebug/pretty"
 	"github.com/neoul/gostudy/datablock/model/object"
 	"github.com/neoul/libydb/go/ydb"
 
@@ -67,25 +69,288 @@ func find(entry *yang.Entry, keys ...string) *yang.Entry {
 }
 
 
-// IsConcreteType reports whether t is a concrete type (built-in scalar type)
-func IsConcreteType(t reflect.Type) bool {
+// IsTypeStruct reports whether t is a struct type.
+func IsTypeStruct(t reflect.Type) bool {
+	return t.Kind() == reflect.Struct
+}
+
+// IsTypeStructPtr reports whether v is a struct ptr type.
+func IsTypeStructPtr(t reflect.Type) bool {
+	if t == reflect.TypeOf(nil) {
+		return false
+	}
+	return t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct
+}
+
+// IsTypeSlice reports whether v is a slice type.
+func IsTypeSlice(t reflect.Type) bool {
+	return t.Kind() == reflect.Slice
+}
+
+// IsTypeSlicePtr reports whether v is a slice ptr type.
+func IsTypeSlicePtr(t reflect.Type) bool {
+	if t == reflect.TypeOf(nil) {
+		return false
+	}
+	return t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Slice
+}
+
+// IsTypeMap reports whether v is a map type.
+func IsTypeMap(t reflect.Type) bool {
+	if t == reflect.TypeOf(nil) {
+		return false
+	}
+	return t.Kind() == reflect.Map
+}
+
+// IsTypeInterface reports whether v is an interface.
+func IsTypeInterface(t reflect.Type) bool {
+	if t == reflect.TypeOf(nil) {
+		return false
+	}
+	return t.Kind() == reflect.Interface
+}
+
+// IsTypeSliceOfInterface reports whether v is a slice of interface.
+func IsTypeSliceOfInterface(t reflect.Type) bool {
+	if t == reflect.TypeOf(nil) {
+		return false
+	}
+	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Interface
+}
+
+// IsNilOrInvalidValue reports whether v is nil or reflect.Zero.
+func IsNilOrInvalidValue(v reflect.Value) bool {
+	return !v.IsValid() || (v.Kind() == reflect.Ptr && v.IsNil()) || IsValueNil(v.Interface())
+}
+
+// IsValueNil returns true if either value is nil, or has dynamic type {ptr,
+// map, slice} with value nil.
+func IsValueNil(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+	switch reflect.TypeOf(value).Kind() {
+	case reflect.Slice, reflect.Ptr, reflect.Map:
+		return reflect.ValueOf(value).IsNil()
+	}
+	return false
+}
+
+// IsValueNilOrDefault returns true if either IsValueNil(value) or the default
+// value for the type.
+func IsValueNilOrDefault(value interface{}) bool {
+	if IsValueNil(value) {
+		return true
+	}
+	if !IsValueScalar(reflect.ValueOf(value)) {
+		// Default value is nil for non-scalar types.
+		return false
+	}
+	return value == reflect.New(reflect.TypeOf(value)).Elem().Interface()
+}
+
+// IsValuePtr reports whether v is a ptr type.
+func IsValuePtr(v reflect.Value) bool {
+	return v.Kind() == reflect.Ptr
+}
+
+// IsValueInterface reports whether v is an interface type.
+func IsValueInterface(v reflect.Value) bool {
+	return v.Kind() == reflect.Interface
+}
+
+// IsValueStruct reports whether v is a struct type.
+func IsValueStruct(v reflect.Value) bool {
+	return v.Kind() == reflect.Struct
+}
+
+// IsValueStructPtr reports whether v is a struct ptr type.
+func IsValueStructPtr(v reflect.Value) bool {
+	return v.Kind() == reflect.Ptr && IsValueStruct(v.Elem())
+}
+
+// IsValueMap reports whether v is a map type.
+func IsValueMap(v reflect.Value) bool {
+	return v.Kind() == reflect.Map
+}
+
+// IsValueSlice reports whether v is a slice type.
+func IsValueSlice(v reflect.Value) bool {
+	return v.Kind() == reflect.Slice
+}
+
+// IsValueScalar reports whether v is a scalar type.
+func IsValueScalar(v reflect.Value) bool {
+	if IsNilOrInvalidValue(v) {
+		return false
+	}
+	if IsValuePtr(v) {
+		if v.IsNil() {
+			return false
+		}
+		v = v.Elem()
+	}
+	return !IsValueStruct(v) && !IsValueMap(v) && !IsValueSlice(v)
+}
+
+// ValuesAreSameType returns true if v1 and v2 has the same reflect.Type,
+// otherwise it returns false.
+func ValuesAreSameType(v1 reflect.Value, v2 reflect.Value) bool {
+	return v1.Type() == v2.Type()
+}
+
+// IsValueInterfaceToStructPtr reports whether v is an interface that contains a
+// pointer to a struct.
+func IsValueInterfaceToStructPtr(v reflect.Value) bool {
+	return IsValueInterface(v) && IsValueStructPtr(v.Elem())
+}
+
+// IsStructValueWithNFields returns true if the reflect.Value representing a
+// struct v has n fields.
+func IsStructValueWithNFields(v reflect.Value, n int) bool {
+	return IsValueStruct(v) && v.NumField() == n
+}
+
+var maxValueStrLen = 150
+// ValueStrDebug returns "<not calculated>" if the package global variable
+// debugLibrary is not set. Otherwise, it is the same as ValueStr.
+// Use this function instead of ValueStr for debugging purpose, e.g. when the
+// output is passed to DbgPrint, because ValueStr calls can be the bottleneck
+// for large input.
+func ValueStrDebug(value interface{}) string {
+	return ValueStr(value)
+}
+
+// ValueStr returns a string representation of value which may be a value, ptr,
+// or struct type.
+func ValueStr(value interface{}) string {
+	out := valueStrInternal(value)
+	if len(out) > maxValueStrLen {
+		out = out[:maxValueStrLen] + "..."
+	}
+	return out
+}
+
+// ValueStrInternal is the internal implementation of ValueStr.
+func valueStrInternal(value interface{}) string {
+	v := reflect.ValueOf(value)
+	kind := v.Kind()
+	switch kind {
+	case reflect.Ptr:
+		if v.IsNil() || !v.IsValid() {
+			return "nil"
+		}
+		return strings.Replace(ValueStr(v.Elem().Interface()), ")", " ptr)", -1)
+	case reflect.Slice:
+		var out string
+		for i := 0; i < v.Len(); i++ {
+			if i != 0 {
+				out += ", "
+			}
+			out += ValueStr(v.Index(i).Interface())
+		}
+		return "[ " + out + " ]"
+	case reflect.Struct:
+		var out string
+		for i := 0; i < v.NumField(); i++ {
+			if i != 0 {
+				out += ", "
+			}
+			if !v.Field(i).CanInterface() {
+				continue
+			}
+			out += ValueStr(v.Field(i).Interface())
+		}
+		return "{ " + out + " }"
+	}
+	out := fmt.Sprintf("%v (%v)", value, kind)
+	if len(out) > maxValueStrLen {
+		out = out[:maxValueStrLen] + "..."
+	}
+	return out
+}
+
+// InsertIntoSlice inserts value into parent which must be a slice ptr.
+func InsertIntoSlice(parentSlice interface{}, value interface{}) error {
+	fmt.Printf("InsertIntoSlice into parent type %T with value %v, type %T", parentSlice, ValueStrDebug(value), value)
+
+	pv := reflect.ValueOf(parentSlice)
+	t := reflect.TypeOf(parentSlice)
+	v := reflect.ValueOf(value)
+
+	if !IsTypeSlicePtr(t) {
+		return fmt.Errorf("InsertIntoSlice parent type is %s, must be slice ptr", t)
+	}
+
+	pv.Elem().Set(reflect.Append(pv.Elem(), v))
+	fmt.Printf("new list: %v\n", pv.Elem().Interface())
+
+	return nil
+}
+
+// InsertIntoMap inserts value with key into parent which must be a map.
+func InsertIntoMap(parentMap interface{}, key interface{}, value interface{}) error {
+	fmt.Printf("InsertIntoMap into parent type %T with key %v(%T) value \n%s\n (%T)",
+		parentMap, ValueStrDebug(key), key, pretty.Sprint(value), value)
+
+	v := reflect.ValueOf(parentMap)
+	t := reflect.TypeOf(parentMap)
+	kv := reflect.ValueOf(key)
+	vv := reflect.ValueOf(value)
+
+	if t.Kind() != reflect.Map {
+		return fmt.Errorf("InsertIntoMap parent type is %s, must be map", t)
+	}
+
+	v.SetMapIndex(kv, vv)
+
+	return nil
+}
+
+// IsSupportedType - true if it is a supported type
+func IsSupportedType(t reflect.Type) bool {
 	if t == reflect.TypeOf(nil) {
 		return false
 	}
 	switch t.Kind() {
-	case reflect.Array, reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Slice, reflect.Struct:
-		return false
-	case reflect.UnsafePointer, reflect.Complex64, reflect.Complex128: // not support
-		return false
 	case reflect.Ptr:
-		return IsConcreteType(t.Elem())
+		return IsSupportedType(t.Elem())
+	case reflect.UnsafePointer, reflect.Complex64, reflect.Complex128,
+		reflect.Array, reflect.Chan, reflect.Func, reflect.Interface: // not support
+		return false
+	default:
+		return true
+	}
+}
+
+// IsAssignableValue - true if it is configurable type
+func IsAssignableValue(v reflect.Value) bool {
+	if !v.IsValid() || !v.CanSet() {
+		return false
+	}
+	return true
+}
+
+// IsSimpleType - true if built-in simple variable type
+func IsSimpleType(t reflect.Type) bool {
+	// if t == reflect.TypeOf(nil) {
+	// 	return false
+	// }
+	switch t.Kind() {
+	case reflect.Ptr:
+		return IsSimpleType(t.Elem())
+	case reflect.Array, reflect.Chan, reflect.Func, reflect.Interface,
+		reflect.Map, reflect.Slice, reflect.Struct,
+		reflect.UnsafePointer, reflect.Complex64, reflect.Complex128:
+		return false
 	default:
 		return true
 	}
 }
 
 // ptr wraps the given value with pointer: V => *V, *V => **V, etc.
-func ptr(v reflect.Value) reflect.Value {
+func newPtrVal(v reflect.Value) reflect.Value {
 	pt := reflect.PtrTo(v.Type()) // create a *T type.
 	pv := reflect.New(pt.Elem())  // create a reflect.Value of type *T.
 	pv.Elem().Set(v)              // sets pv to point to underlying value of v.
@@ -93,20 +358,26 @@ func ptr(v reflect.Value) reflect.Value {
 }
 
 // return a new reflect.Value based on typ and src
-func newVal(typ reflect.Type, src interface{}) (reflect.Value, bool) {
-	if typ.Kind() == reflect.Ptr {
-		fmt.Printf(" . src(%T) -> typ(%s): %v\n", src, typ.Kind(), src)
-		rvPtr := reflect.New(typ.Elem())
-		rv, ok := newVal(typ.Elem(), src)
+func newVal(t reflect.Type, src interface{}) (reflect.Value, bool) {
+	if t.Kind() == reflect.Ptr {
+		fmt.Printf(" . src(%T) -> t(%s): %v\n", src, t.Kind(), src)
+		rvPtr := reflect.New(t.Elem())
+		rv, ok := newVal(t.Elem(), src)
 		if (ok) {
 			rvPtr.Elem().Set(rv)
 		}
 		return rvPtr, ok
 	}
-	fmt.Printf(" . src(%T) -> typ(%s): %v\n", src, typ.Kind(), src)
+	if ! IsSupportedType(t) {
+		return reflect.Value{}, false
+	}
+	if ! IsSimpleType(t) {
+		return reflect.Value{}, false
+	}
+	fmt.Printf(" . src(%T) -> t(%s): %v\n", src, t.Kind(), src)
 	st := reflect.TypeOf(src)
 	sv := reflect.ValueOf(src)
-	if typ.Kind() == reflect.String {
+	if t.Kind() == reflect.String {
 		switch st.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			val := fmt.Sprintf("%d", sv.Int())
@@ -125,39 +396,52 @@ func newVal(typ reflect.Type, src interface{}) (reflect.Value, bool) {
 			return reflect.ValueOf(&tf), true
 		}
 	}
-	rv := reflect.New(typ)
+	rv := reflect.New(t)
 	rve := rv.Elem()
 	if st.Kind() == reflect.String {
-		switch typ.Kind() {
+		srcstring := src.(string)
+		switch t.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			val, err := strconv.ParseInt(src.(string), 10, 64)
-			if err != nil {
-				return rv, false
+			if len(srcstring) == 0 {
+				rve.SetInt(0)
+			} else {
+				val, err := strconv.ParseInt(src.(string), 10, 64)
+				if err != nil {
+					return rv, false
+				}
+				if rve.OverflowInt(val) {
+					return rv, false
+				}
+				rve.SetInt(val)
 			}
-			if rve.OverflowInt(val) {
-				return rv, false
-			}
-			rve.SetInt(val)
 			return rv, true
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-			val, err := strconv.ParseUint(src.(string), 10, 64)
-			if err != nil {
-				return rv, false
+			if len(srcstring) == 0 {
+				rve.SetUint(0)
+			} else {
+				val, err := strconv.ParseUint(src.(string), 10, 64)
+				if err != nil {
+					return rv, false
+				}
+				if rve.OverflowUint(val) {
+					return rv, false
+				}
+				rve.SetUint(val)
 			}
-			if rve.OverflowUint(val) {
-				return rv, false
-			}
-			rve.SetUint(val)
 			return rv, true
 		case reflect.Float32, reflect.Float64:
-			val, err := strconv.ParseFloat(src.(string), 64)
-			if err != nil {
-				return rv, false
+			if len(srcstring) == 0 {
+				rve.SetFloat(0)
+			} else {
+				val, err := strconv.ParseFloat(src.(string), 64)
+				if err != nil {
+					return rv, false
+				}
+				if rve.OverflowFloat(val) {
+					return rv, false
+				}
+				rve.SetFloat(val)
 			}
-			if rve.OverflowFloat(val) {
-				return rv, false
-			}
-			rve.SetFloat(val)
 			return rv, true
 		case reflect.Bool:
 			s := src.(string)
@@ -169,7 +453,7 @@ func newVal(typ reflect.Type, src interface{}) (reflect.Value, bool) {
 			return rv, true
 		}
 	}
-	if typ.Kind() == reflect.Bool {
+	if t.Kind() == reflect.Bool {
 		switch st.Kind() {
 		case reflect.String:
 			if len(sv.String()) > 0 {
@@ -202,7 +486,7 @@ func newVal(typ reflect.Type, src interface{}) (reflect.Value, bool) {
 		}
 	}
 	if st.Kind() == reflect.Bool {
-		switch typ.Kind() {
+		switch t.Kind() {
 		case reflect.String:
 			if sv.Bool() {
 				rve.SetString("true")
@@ -234,16 +518,63 @@ func newVal(typ reflect.Type, src interface{}) (reflect.Value, bool) {
 		}
 	}
 
-	if st.ConvertibleTo(typ) {
-		rv = sv.Convert(typ)
+	if st.ConvertibleTo(t) {
+		rv = sv.Convert(t)
 		return rv, true
 	}
 	return rv, false
 }
 
+func newDefaultVal(t reflect.Type) (reflect.Value, bool) {
+	if ! IsSupportedType(t) {
+		return reflect.Value{}, false
+	}
+	if t.Kind() == reflect.Ptr {
+		v, ok := newDefaultVal(t.Elem())
+		if ok {
+			return newPtrVal(v), ok
+		}
+	} else {
+		switch t.Kind() {
+		case reflect.Map:
+			return reflect.MakeMap(t), true
+		case reflect.Slice:
+			return reflect.MakeSlice(t, 0, 0), true
+		// case reflect.Chan:
+		// 	return reflect.MakeChan(t, 0), true
+		case reflect.Struct:
+			return newStruct(t)
+		case reflect.Ptr:
+			// not reachable here.
+			return reflect.Value{}, false
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			rv := reflect.New(t)
+			rv.Elem().SetInt(0)
+			return rv, true
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			rv := reflect.New(t)
+			rv.Elem().SetUint(0)
+			return rv, true
+		case reflect.Float32, reflect.Float64:
+			rv := reflect.New(t)
+			rv.Elem().SetFloat(0)
+			return rv, true
+		case reflect.Bool:
+			rv := reflect.New(t)
+			rv.Elem().SetBool(false)
+			return rv, true
+		case reflect.String:
+			rv := reflect.New(t)
+			rv.Elem().SetString("")
+			return rv, true
+		default:
+			return reflect.Value{}, false
+		}
+	}
+	return reflect.Value{}, false
+}
 
-
-func getChildName(ft reflect.StructField) (string, string) {
+func getStructFieldName(ft reflect.StructField) (string, string) {
 	prefix := ""
 	name := ft.Name
 	tag := ft.Tag.Get("json")
@@ -263,7 +594,7 @@ func getChildName(ft reflect.StructField) (string, string) {
 	return prefix, name
 }
 
-func searchField(pt reflect.Type, pv reflect.Value, name string) (reflect.StructField, reflect.Value, bool) {
+func searchStructField(pt reflect.Type, pv reflect.Value, name string) (reflect.StructField, reflect.Value, bool) {
 	var fv reflect.Value
 	ft, ok := pt.FieldByName(name)
 	if ok {
@@ -277,7 +608,7 @@ func searchField(pt reflect.Type, pv reflect.Value, name string) (reflect.Struct
 		if !fv.IsValid() || !fv.CanSet() {
 			continue
 		}
-		_, name := getChildName(ft)
+		_, name := getStructFieldName(ft)
 		if name != "" {
 			return ft, fv, true
 		}
@@ -286,39 +617,88 @@ func searchField(pt reflect.Type, pv reflect.Value, name string) (reflect.Struct
 }
 
 func setStructField(ft reflect.StructField, fv reflect.Value, value interface{}) {
-	if (IsConcreteType(ft.Type)) {
+	if (IsSimpleType(ft.Type)) {
 		nv, ok := newVal(ft.Type, value)
 		if ok {
 			fv.Set(nv)
 			// fmt.Println("fv", fv.Elem().String())
 		}
 	} else {
-		t := ft.Type
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
+		nv, ok := newDefaultVal(ft.Type)
+		if ok {
+			fv.Set(nv)
 		}
-		switch t.Kind() {
-		case reflect.Map:
-			fmt.Println("Crerate Map in StructField:", fv.IsNil())
-			if fv.IsNil() {
-				fv.Set(reflect.MakeMap(t))
-			}
-			fmt.Println("Crerate Map in StructField:", fv.IsNil())
 
-		case reflect.Slice:
-			if fv.IsNil() {
-				fv.Set(reflect.MakeSlice(t, 0, 0))
-			}
-		case reflect.Chan:
-			if fv.IsNil() {
-				fv.Set(reflect.MakeChan(t, 0))
-			}
-		}
+		// t := ft.Type
+		// if t.Kind() == reflect.Ptr {
+		// 	t = t.Elem()
+		// }
+		// switch t.Kind() {
+		// case reflect.Map:
+		// 	fmt.Println("Create Map in StructField:", fv.IsNil())
+		// 	if fv.IsNil() {
+		// 		fv.Set(reflect.MakeMap(t))
+		// 	}
+		// 	fmt.Println("Create Map in StructField:", fv.IsNil())
+
+		// case reflect.Slice:
+		// 	if fv.IsNil() {
+		// 		fv.Set(reflect.MakeSlice(t, 0, 0))
+		// 	}
+		// }
 	}
 }
 
+func newStruct(t reflect.Type) (reflect.Value, bool) {
+	if t.Kind() != reflect.Struct {
+		return reflect.Value{}, false
+	}
+	rv := reflect.New(t)
+	rve := rv.Elem()
+	if ! IsAssignableValue(rve) {
+		return reflect.Value{}, false
+	}
+
+	for i := 0; i < rve.NumField(); i++ {
+		fv := rve.Field(i)
+		ft := t.Field(i)
+		if !fv.IsValid() || !fv.CanSet() {
+			continue
+		}
+		switch ft.Type.Kind() {
+		case reflect.Map:
+			fv.Set(reflect.MakeMap(ft.Type))
+		case reflect.Slice:
+			fv.Set(reflect.MakeSlice(ft.Type, 0, 0))
+		case reflect.Chan:
+			fv.Set(reflect.MakeChan(ft.Type, 0))
+		case reflect.Struct:
+			srv, ok := newStruct(ft.Type)
+			if ok {
+				fv.Set(srv)
+			}
+		case reflect.Ptr:
+			srv, ok := newDefaultVal(ft.Type)
+			if ok {
+				fv.Set(srv)
+			}
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			fv.SetInt(0)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+			fv.SetUint(0)
+		case reflect.Float32, reflect.Float64:
+			fv.SetFloat(0)
+		case reflect.Bool:
+			fv.SetBool(false)
+		case reflect.String:
+			fv.SetString("")
+		default:
+		}
+	}
+	return rv, true
+}
+
 func setChild(pt reflect.Type, pv reflect.Value, childname string, childval interface{}) {
-	fmt.Println(">> ", pt, pv)
 	if pt == reflect.TypeOf(nil) {
 		return
 	}
@@ -339,7 +719,7 @@ func setChild(pt reflect.Type, pv reflect.Value, childname string, childval inte
 			pv.Set(reflect.MakeChan(pt, 0))
 		}
 	case reflect.Struct:
-		ft, fv, ok := searchField(pt, pv, childname)
+		ft, fv, ok := searchStructField(pt, pv, childname)
 		if ok {
 			fmt.Println("::", childname, ft, fv)
 			setStructField(ft, fv, childval)
@@ -359,41 +739,41 @@ func setChild(pt reflect.Type, pv reflect.Value, childname string, childval inte
 
 // SetChild - Set child data (struct fields, map or slice)
 func SetChild(parent reflect.Value, childname string, childval interface{}) error {
-	if ! parent.IsValid() {
-		fmt.Println("empty reflect.Value ", childname)
-		return fmt.Errorf("no parent")
+	if ! IsAssignableValue(parent) {
+		return fmt.Errorf("not assignable value(%s)", parent)
 	}
 	pv := parent
 	pt := parent.Type()
+	if IsSimpleType(pt) {
+		return fmt.Errorf("invalid type (%s)", pt)
+	}
 
 	if pv.Kind() == reflect.Ptr {
-		pt = pt.Elem()
 		if pv.IsNil() {
-			pv = reflect.New(pt)
+			pv, _ = newDefaultVal(pt)
 		}
 		setChild(pt, pv.Elem(), childname, childval)
 	} else {
 		setChild(pt, pv, childname, childval)
 	}
-	if IsConcreteType(pt) {
-		return fmt.Errorf("invalid type (%s)", pt)
-	}
+	
 	return nil
 }
 
 func getMapEntry(mv reflect.Value, key string) (reflect.Value, bool) {
 	mt := mv.Type()
 	kt := mt.Key()
-	if (IsConcreteType(kt)) {
+	if (IsSimpleType(kt)) {
 		kv, ok := newVal(kt, key)
 		if ok {
 			rv := mv.MapIndex(kv)
 			
 			if rv.IsValid() {
-				fmt.Println("RV", rv)
+				fmt.Println("found:", key)
 				return rv, true
 			}
-			return rv, false
+			fmt.Println("not found:", key)
+			return reflect.Value{}, false
 		}
 	}
 	return reflect.Value{}, false
@@ -402,7 +782,7 @@ func getMapEntry(mv reflect.Value, key string) (reflect.Value, bool) {
 func initEmptyMapEntry(mv reflect.Value, key string) (reflect.Value, bool) {
 	mt := mv.Type()
 	kt := mt.Key()
-	if (IsConcreteType(kt)) {
+	if (IsSimpleType(kt)) {
 		kv, ok := newVal(kt, key)
 		if ok {
 			rv := mv.MapIndex(kv)
@@ -438,7 +818,7 @@ func GetChild(parent reflect.Value, childname string) (reflect.Value, bool) {
 	case reflect.Slice:
 		return reflect.Value{}, false
 	case reflect.Struct:
-		_, fv, ok := searchField(pt, pv, childname)
+		_, fv, ok := searchStructField(pt, pv, childname)
 		if ok {
 			return fv, true
 		}
@@ -451,24 +831,34 @@ func GetChild(parent reflect.Value, childname string) (reflect.Value, bool) {
 }
 
 // Set - Set target go structure based on source (YDB)
-func Set(target reflect.Value, source *ydb.YNode) error {
+func Set(t reflect.Type, v reflect.Value, source *ydb.YNode) error {
 	for _, child := range source.GetChildren() {
-		fmt.Println("SetChild::", child)
-		SetChild(target, child.GetKey(), child.GetValue())
-		fmt.Println("GetChild::", child)
-		cv, ok := GetChild(target, child.GetKey())
-		if ok {
-			err := Set(cv, child)
-			if err != nil {
-				return err
-			}
-		}
+		fmt.Println("SetChild::", child.GetKey())
+		
+		// SetChild(target, child.GetKey(), child.GetValue())
+		// fmt.Println("GetChild::", child)
+		// cv, ok := GetChild(target, child.GetKey())
+		// if ok {
+		// 	fmt.Println("found:", cv)
+		// 	err := Set(cv, child)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// }
 	}
 	return nil
 }
 
 func ydb2go(source *ydb.YNode, top interface{}) error {
-	return Set(reflect.ValueOf(top), source)
+	// t := reflect.TypeOf(top)
+	v := reflect.ValueOf(top)
+	if IsNilOrInvalidValue(v) {
+		fmt.Println("IsNilOrInvalidValue")
+	} else {
+		fmt.Println("not IsNilOrInvalidValue")
+	}
+	return nil
+	// return Set(, source)
 }
 
 func main() {
