@@ -136,6 +136,11 @@ func IsTypeSliceOfInterface(t reflect.Type) bool {
 	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Interface
 }
 
+// IsTypeChan reports whether v is a slice type.
+func IsTypeChan(t reflect.Type) bool {
+	return t.Kind() == reflect.Chan
+}
+
 // IsNilOrInvalidValue reports whether v is nil or reflect.Zero.
 func IsNilOrInvalidValue(v reflect.Value) bool {
 	return !v.IsValid() || (v.Kind() == reflect.Ptr && v.IsNil()) || IsValueNil(v.Interface())
@@ -553,6 +558,43 @@ func newValueStruct(t reflect.Type) reflect.Value {
 }
 
 
+func newValueMap(t reflect.Type) reflect.Value {
+	if t.Kind() == reflect.Ptr {
+		pv := reflect.New(t)
+		pt := reflect.PtrTo(t)
+		fmt.Println(pv, pt)
+		cv := newValueMap(t.Elem())
+		pv.Elem().Set(cv)
+		return pv
+	}
+	return reflect.MakeMap(t)
+}
+
+func newValueSlice(t reflect.Type) reflect.Value {
+	if t.Kind() == reflect.Ptr {
+		pv := reflect.New(t)
+		pt := reflect.PtrTo(t)
+		fmt.Println(pv, pt)
+		cv := newValueMap(t.Elem())
+		pv.Elem().Set(cv)
+		return pv
+	}
+	return reflect.MakeSlice(t, 0, 0)
+}
+
+
+func newValueChan(t reflect.Type) reflect.Value {
+	if t.Kind() == reflect.Ptr {
+		pv := reflect.New(t)
+		pt := reflect.PtrTo(t)
+		fmt.Println(pv, pt)
+		cv := newValueMap(t.Elem())
+		pv.Elem().Set(cv)
+		return pv
+	}
+	return reflect.MakeChan(t, 0)
+}
+
 func newValueScalar(t reflect.Type) reflect.Value {
 	pv := reflect.New(t)
 	pt := reflect.PtrTo(t)
@@ -581,43 +623,31 @@ func newValueScalar(t reflect.Type) reflect.Value {
 
 
 // return new ptr variable of the t type. e.g. T ==> *T
-func newValue(t reflect.Type, src interface{}) reflect.Value {
+// key is just used for map type data.
+// value is used for the base value of the created variable.
+func newValue(t reflect.Type, value interface{}) reflect.Value {
 	if t == reflect.TypeOf(nil) {
 		return reflect.Value{}
 	}
-
 	pt := GetPureType(t)
-	// v := reflect.Zero(t)
-	// dv := v
-	// dt := t
-	// if t.Kind() == reflect.Ptr {
-	// 	pv := dv
-	// 	dt = dt.Elem()
-	// 	fmt.Println("> ", PrintValue(dv.Interface()))
-	// 	for ; dt.Kind() == reflect.Ptr; dt = dt.Elem() {
-	// 		dv = reflect.New(dt.Elem())
-	// 		fmt.Println(" > ", PrintValue(dv.Interface()))
-	// 		pv.Elem().Set(dv)
-	// 		pv = dv
-	// 	}
-	// }
 	if IsTypeStruct(pt) {
 		return newValueStruct(t)
 	} else if IsTypeMap(pt) {
-
+		return newValueMap(t)
 	} else if IsTypeSlice(pt) {
-
+		return newValueSlice(t)
+	} else if IsTypeChan(pt) {
+		return newValueChan(t)
 	} else {
-		if IsValueNil(src) {
+		if IsValueNil(value) {
 			return newValueScalar(t)
 		}
 		v := reflect.Zero(t)
 		v = newPtrValue(v)
-		setValueScalar(v, src)
+		setValueScalar(v, value)
 		// fmt.Println(PrintValue(v.Interface()))
 		return v
 	}
-	return reflect.Value{}
 }
 
 // ptr wraps the given value with pointer: V => *V, *V => **V, etc.
@@ -633,6 +663,8 @@ type structEx struct {
 	B *int
 	C string
 	D *string
+	E map[int]string
+	F []int
 }
 
 func main() {
