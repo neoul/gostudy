@@ -2,12 +2,12 @@ package main // import "github.com/neoul/gostudy/datablock/ydb2go"
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
 
+	"github.com/neoul/gostudy/datablock/log"
 	"github.com/neoul/gostudy/datablock/model/object"
 	"github.com/neoul/libydb/go/ydb"
 
@@ -23,12 +23,15 @@ var (
 	Schema *ytypes.Schema
 	// Entries is yang.Entry list rearranged by name
 	Entries map[string][]*yang.Entry
+
+	ylog log.Log
 )
 
 func init() {
+	ylog = log.NewLog("ydb2go", os.Stdout)
 	schema, err := object.Schema()
 	if err != nil {
-		panic("Failed to load Schema")
+		ylog.Panicf("%s\n", err)
 	}
 	Schema = schema
 	Entries = make(map[string][]*yang.Entry)
@@ -319,7 +322,7 @@ func valueStrInternal(value interface{}) string {
 
 func printValue(v reflect.Value, ptrcnt int) string {
 	if IsNilOrInvalidValue(v) {
-		return fmt.Sprintf("%s(nil)", v.Type())
+		return "(???)"
 	}
 	if IsValuePtr(v) {
 		ptrcnt++
@@ -379,24 +382,6 @@ func setSliceValue(sv reflect.Value, value interface{}) error {
 		vv = vv.Elem()
 	}
 	sv.Elem().Set(reflect.Append(sv.Elem(), vv))
-	return nil
-}
-
-// InsertIntoSlice inserts value into parent which must be a slice ptr.
-func InsertIntoSlice(parentSlice interface{}, value interface{}) error {
-	fmt.Printf("InsertIntoSlice into parent type %T with value %v, type %T", parentSlice, ValueStrDebug(value), value)
-
-	pv := reflect.ValueOf(parentSlice)
-	t := reflect.TypeOf(parentSlice)
-	v := reflect.ValueOf(value)
-
-	if !IsTypeSlicePtr(t) {
-		return fmt.Errorf("InsertIntoSlice parent type is %s, must be slice ptr", t)
-	}
-
-	pv.Elem().Set(reflect.Append(pv.Elem(), v))
-	fmt.Printf("new list: %v\n", pv.Elem().Interface())
-
 	return nil
 }
 
@@ -646,14 +631,11 @@ func newValueChan(t reflect.Type) reflect.Value {
 }
 
 func newValueScalar(t reflect.Type) reflect.Value {
-	pv := reflect.New(t)
-	pt := reflect.PtrTo(t)
-	fmt.Println(pv, pt)
-	if pv.Elem().Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Ptr {
 		cv := newValueScalar(t.Elem())
-		pv.Elem().Set(cv)
-		return pv
+		return newPtrOfValue(cv)
 	}
+	pv := reflect.New(t)
 	pve := pv.Elem()
 	switch pve.Type().Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -668,7 +650,7 @@ func newValueScalar(t reflect.Type) reflect.Value {
 		pve.SetString("")
 	default:
 	}
-	return pv
+	return pve
 }
 
 
@@ -689,13 +671,11 @@ func newValue(t reflect.Type, value interface{}) reflect.Value {
 	} else if IsTypeChan(pt) {
 		return newValueChan(t)
 	} else {
+		v := newValueScalar(t)
 		if IsValueNil(value) {
-			return newValueScalar(t)
+			return v
 		}
-		v := reflect.Zero(t)
-		v = newPtrOfValue(v)
 		setValueScalar(v, value)
-		// fmt.Println(PrintValue(v.Interface()))
 		return v
 	}
 }
@@ -708,18 +688,30 @@ func newPtrOfValue(v reflect.Value) reflect.Value {
 	return pv
 }
 
+// NewValue creates an variable of the value based on the type of the typRef.
+func NewValue(typRef interface{}, value interface{}) interface{} {
+	v := reflect.ValueOf(value)
+	if IsNilOrInvalidValue(v) {
+		return nil
+	}
+	nv := newValue(reflect.TypeOf(typRef), value)
+	if nv.IsValid() {
+		return nv.Interface()
+	}
+	return nil
+}
 
 // SetValue sets the value based on source.
 func SetValue(target interface{}, value interface{}) error {
 	v := reflect.ValueOf(target)
-	if !IsValuePtr(v) {
-		return fmt.Errorf("no ptr - %s", PrintValue(target))
-	}
 	if IsNilOrInvalidValue(v) {
-		return fmt.Errorf("nil or invalid - %s", PrintValue(target))
+		return fmt.Errorf("nil or invalid:: %s", PrintValue(target))
+	}
+	if !IsValuePtr(v) {
+		return fmt.Errorf("no ptr :: %s", PrintValue(target))
 	}
 	if IsValueStruct(v) || IsValueMap(v) || IsValueSlice(v) {
-		return fmt.Errorf("no scalar value - %s", PrintValue(target))
+		return fmt.Errorf("no scalar value :: %s", PrintValue(target))
 	}
 	return setValueScalar(v, value)
 }
@@ -729,12 +721,12 @@ func SetMapValue(target interface{}, key interface{}, value interface{}) error {
 	t := reflect.TypeOf(target)
 	v := reflect.ValueOf(target)
 	if IsValueNil(target) {
-		return fmt.Errorf("nil map - %s", PrintValue(target))
+		return fmt.Errorf("nil map :: %s", PrintValue(target))
 	}
 	if IsTypeDeep(t, reflect.Map) {
 		return setMapValue(v, key, value)
 	}
-	return fmt.Errorf("no map - %s", PrintValue(target))
+	return fmt.Errorf("no map :: %s", PrintValue(target))
 }
 
 // SetSliceValue sets the value based on source.
@@ -742,12 +734,12 @@ func SetSliceValue(target interface{}, value interface{}) error {
 	t := reflect.TypeOf(target)
 	v := reflect.ValueOf(target)
 	if IsValueNil(target) {
-		return fmt.Errorf("nil slice - %s", PrintValue(target))
+		return fmt.Errorf("nil slice :: %s", PrintValue(target))
 	}
 	if IsTypeDeep(t, reflect.Slice) {
 		return setSliceValue(v, value)
 	}
-	return fmt.Errorf("no slice - %s", PrintValue(target))
+	return fmt.Errorf("no slice :: %s", PrintValue(target))
 }
 
 
@@ -772,35 +764,50 @@ func main() {
 	r, err := os.Open("../model/data/object.yaml")
 	defer r.Close()
 	if err != nil {
-		log.Fatalln(err)
+		ylog.Fatal(err)
 	}
 	dec := db.NewDecoder(r)
 	dec.Decode()
-	node := db.Retrieve(ydb.RetrieveAll())
-	fmt.Println(node)
-	a := 10
-	err = SetValue(&a, "2")
-	fmt.Println(err, PrintValue(a))
-	var b *int
-	var s **string
-	err = SetValue(&b, 10)
-	fmt.Println(err, PrintValue(b))
-	err = SetValue(&s, "10")
-	fmt.Println(err, PrintValue(s), s, *s, **s)
+	// node := db.Retrieve(ydb.RetrieveAll())
+	// fmt.Println(node)
 
-	// v := reflect.Zero(reflect.TypeOf(a))
-	// fmt.Println(v.Interface())
-	v := newValue(reflect.TypeOf(&a), 111)
-	fmt.Println(PrintValue(v.Interface()))
+	a := 1
+	na := NewValue(a, 10)
+	ylog.Debug(PrintValue(na))
+	na = NewValue(nil, 10)
+	ylog.Debug(PrintValue(na))
+	// v := newValue(reflect.TypeOf(a), 10)
+	// ylog.Debug(PrintValue(v.Interface()))
+	// v = newValue(reflect.TypeOf(&a), 10)
+	// ylog.Debug(PrintValue(v.Interface()))
+	// err = SetValue(&a, "2")
+	// ylog.Debug(err, PrintValue(a))
+	// err = SetValue(nil, "2")
+	// ylog.Debug(err, PrintValue(a))
+	// v = newValue(reflect.TypeOf(&a), 10)
+	// ylog.Debug(PrintValue(v.Interface()))
+	// a := 10
 
-	x := structEx{A : 10, C : "hello"}
-	v = newValue(reflect.TypeOf(x), 111)
-	fmt.Println(PrintValue(v.Interface()))
-	// x.E[10] = "HEE"
-	fmt.Println(x.E)
-	vv := v.Interface()
-	fmt.Println("vv", vv)
-	vex := vv.(*structEx)
-	err = SetMapValue(vex.E, "10", "ok")
-	fmt.Println(err, PrintValue(vex.E))
+	// var b *int
+	// var s **string
+	// err = SetValue(&b, 10)
+	// fmt.Println(err, PrintValue(b))
+	// err = SetValue(&s, "10")
+	// fmt.Println(err, PrintValue(s), s, *s, **s)
+
+	// // v := reflect.Zero(reflect.TypeOf(a))
+	// // fmt.Println(v.Interface())
+	// v := newValue(reflect.TypeOf(&a), 111)
+	// fmt.Println(PrintValue(v.Interface()))
+
+	// x := structEx{A : 10, C : "hello"}
+	// v = newValue(reflect.TypeOf(x), 111)
+	// fmt.Println(PrintValue(v.Interface()))
+	// // x.E[10] = "HEE"
+	// fmt.Println(x.E)
+	// vv := v.Interface()
+	// fmt.Println("vv", vv)
+	// vex := vv.(*structEx)
+	// err = SetMapValue(vex.E, "10", "ok")
+	// fmt.Println(err, PrintValue(vex.E))
 }
