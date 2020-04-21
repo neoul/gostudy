@@ -5,31 +5,31 @@ import (
 	"os"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"github.com/neoul/gostudy/datablock/log"
 )
-
-// Generate rule to create the example structs:
-//go:generate go run ../../../github.com/openconfig/ygot/generator/generator.go -path=yang -output_file=object/example.go -package_name=object -generate_fakeroot -fakeroot_name=device yang/example.yang
 
 var (
 	ylog log.Log
 )
 
 func init() {
-	ylog = log.NewLog("ydb2go", os.Stdout)
+	ylog = log.NewLog("reflection", os.Stdout)
 }
 
-// GetPureType returns not reflect.Ptr type.
-func GetPureType(t reflect.Type) reflect.Type {
+func typeString(t reflect.Type) string {
+	return fmt.Sprintf("%s", t)
+}
+
+// getBaseType returns not reflect.Ptr type.
+func getBaseType(t reflect.Type) reflect.Type {
 	for ; t.Kind() == reflect.Ptr; t = t.Elem() {
 	}
 	return t
 }
 
-// IsTypeDeep reports whether t is k type.
-func IsTypeDeep(t reflect.Type, kinds ...reflect.Kind) bool {
+// isTypeDeep reports whether t is k type.
+func isTypeDeep(t reflect.Type, kinds ...reflect.Kind) bool {
 	for ; t.Kind() == reflect.Ptr; t = t.Elem() {
 	}
 	for _, k := range kinds {
@@ -40,8 +40,8 @@ func IsTypeDeep(t reflect.Type, kinds ...reflect.Kind) bool {
 	return false
 }
 
-// IsReferenceType returns true if t is a map, slice or channel
-func IsReferenceType(t reflect.Type) bool {
+// isReferenceType returns true if t is a map, slice or channel
+func isReferenceType(t reflect.Type) bool {
 	switch t.Kind() {
 	case reflect.Slice, reflect.Chan, reflect.Map:
 		return true
@@ -49,69 +49,69 @@ func IsReferenceType(t reflect.Type) bool {
 	return false
 }
 
-// IsTypeStruct reports whether t is a struct type.
-func IsTypeStruct(t reflect.Type) bool {
+// isTypeStruct reports whether t is a struct type.
+func isTypeStruct(t reflect.Type) bool {
 	return t.Kind() == reflect.Struct
 }
 
-// IsTypeStructPtr reports whether v is a struct ptr type.
-func IsTypeStructPtr(t reflect.Type) bool {
+// isTypeStructPtr reports whether v is a struct ptr type.
+func isTypeStructPtr(t reflect.Type) bool {
 	if t == reflect.TypeOf(nil) {
 		return false
 	}
 	return t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct
 }
 
-// IsTypeSlice reports whether v is a slice type.
-func IsTypeSlice(t reflect.Type) bool {
+// isTypeSlice reports whether v is a slice type.
+func isTypeSlice(t reflect.Type) bool {
 	return t.Kind() == reflect.Slice
 }
 
-// IsTypeSlicePtr reports whether v is a slice ptr type.
-func IsTypeSlicePtr(t reflect.Type) bool {
+// isTypeSlicePtr reports whether v is a slice ptr type.
+func isTypeSlicePtr(t reflect.Type) bool {
 	if t == reflect.TypeOf(nil) {
 		return false
 	}
 	return t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Slice
 }
 
-// IsTypeMap reports whether v is a map type.
-func IsTypeMap(t reflect.Type) bool {
+// isTypeMap reports whether v is a map type.
+func isTypeMap(t reflect.Type) bool {
 	if t == reflect.TypeOf(nil) {
 		return false
 	}
 	return t.Kind() == reflect.Map
 }
 
-// IsTypeInterface reports whether v is an interface.
-func IsTypeInterface(t reflect.Type) bool {
+// isTypeInterface reports whether v is an interface.
+func isTypeInterface(t reflect.Type) bool {
 	if t == reflect.TypeOf(nil) {
 		return false
 	}
 	return t.Kind() == reflect.Interface
 }
 
-// IsTypeSliceOfInterface reports whether v is a slice of interface.
-func IsTypeSliceOfInterface(t reflect.Type) bool {
+// isTypeSliceOfInterface reports whether v is a slice of interface.
+func isTypeSliceOfInterface(t reflect.Type) bool {
 	if t == reflect.TypeOf(nil) {
 		return false
 	}
 	return t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Interface
 }
 
-// IsTypeChan reports whether v is a slice type.
-func IsTypeChan(t reflect.Type) bool {
+// isTypeChan reports whether v is a slice type.
+func isTypeChan(t reflect.Type) bool {
 	return t.Kind() == reflect.Chan
 }
 
-// IsNilOrInvalidValue reports whether v is nil or reflect.Zero.
-func IsNilOrInvalidValue(v reflect.Value) bool {
-	return !v.IsValid() || (v.Kind() == reflect.Ptr && v.IsNil()) || IsValueNil(v.Interface())
+// isNilOrInvalidValue reports whether v is nil or reflect.Zero.
+func isNilOrInvalidValue(v reflect.Value) bool {
+	return !v.IsValid() || (v.Kind() == reflect.Ptr && v.IsNil()) || isValueNil(v.Interface())
 }
 
-// IsValueNil returns true if either value is nil, or has dynamic type {ptr,
+// isValueNil returns true if either value is nil, or has dynamic type {ptr,
 // map, slice} with value nil.
-func IsValueNil(value interface{}) bool {
+func isValueNil(value interface{}) bool {
 	if value == nil {
 		return true
 	}
@@ -122,86 +122,86 @@ func IsValueNil(value interface{}) bool {
 	return false
 }
 
-// IsValueNilOrDefault returns true if either IsValueNil(value) or the default
+// isValueNilOrDefault returns true if either isValueNil(value) or the default
 // value for the type.
-func IsValueNilOrDefault(value interface{}) bool {
-	if IsValueNil(value) {
+func isValueNilOrDefault(value interface{}) bool {
+	if isValueNil(value) {
 		return true
 	}
-	if !IsValueScalar(reflect.ValueOf(value)) {
+	if !isValueScalar(reflect.ValueOf(value)) {
 		// Default value is nil for non-scalar types.
 		return false
 	}
 	return value == reflect.New(reflect.TypeOf(value)).Elem().Interface()
 }
 
-// IsValuePtr reports whether v is a ptr type.
-func IsValuePtr(v reflect.Value) bool {
+// isValuePtr reports whether v is a ptr type.
+func isValuePtr(v reflect.Value) bool {
 	return v.Kind() == reflect.Ptr
 }
 
-// IsValueInterface reports whether v is an interface type.
-func IsValueInterface(v reflect.Value) bool {
+// isValueInterface reports whether v is an interface type.
+func isValueInterface(v reflect.Value) bool {
 	return v.Kind() == reflect.Interface
 }
 
-// IsValueStruct reports whether v is a struct type.
-func IsValueStruct(v reflect.Value) bool {
+// isValueStruct reports whether v is a struct type.
+func isValueStruct(v reflect.Value) bool {
 	return v.Kind() == reflect.Struct
 }
 
-// IsValueStructPtr reports whether v is a struct ptr type.
-func IsValueStructPtr(v reflect.Value) bool {
-	return v.Kind() == reflect.Ptr && IsValueStruct(v.Elem())
+// isValueStructPtr reports whether v is a struct ptr type.
+func isValueStructPtr(v reflect.Value) bool {
+	return v.Kind() == reflect.Ptr && isValueStruct(v.Elem())
 }
 
-// IsValueMap reports whether v is a map type.
-func IsValueMap(v reflect.Value) bool {
+// isValueMap reports whether v is a map type.
+func isValueMap(v reflect.Value) bool {
 	return v.Kind() == reflect.Map
 }
 
-// IsValueSlice reports whether v is a slice type.
-func IsValueSlice(v reflect.Value) bool {
+// isValueSlice reports whether v is a slice type.
+func isValueSlice(v reflect.Value) bool {
 	return v.Kind() == reflect.Slice
 }
 
-// IsValueScalar reports whether v is a scalar type.
-func IsValueScalar(v reflect.Value) bool {
-	if IsNilOrInvalidValue(v) {
+// isValueScalar reports whether v is a scalar type.
+func isValueScalar(v reflect.Value) bool {
+	if isNilOrInvalidValue(v) {
 		return false
 	}
-	if IsValuePtr(v) {
+	if isValuePtr(v) {
 		if v.IsNil() {
 			return false
 		}
 		v = v.Elem()
 	}
-	return !IsValueStruct(v) && !IsValueMap(v) && !IsValueSlice(v)
+	return !isValueStruct(v) && !isValueMap(v) && !isValueSlice(v)
 }
 
-// ValuesAreSameType returns true if v1 and v2 has the same reflect.Type,
+// valuesAreSameType returns true if v1 and v2 has the same reflect.Type,
 // otherwise it returns false.
-func ValuesAreSameType(v1 reflect.Value, v2 reflect.Value) bool {
+func valuesAreSameType(v1 reflect.Value, v2 reflect.Value) bool {
 	return v1.Type() == v2.Type()
 }
 
-// IsValueInterfaceToStructPtr reports whether v is an interface that contains a
+// isValueInterfaceToStructPtr reports whether v is an interface that contains a
 // pointer to a struct.
-func IsValueInterfaceToStructPtr(v reflect.Value) bool {
-	return IsValueInterface(v) && IsValueStructPtr(v.Elem())
+func isValueInterfaceToStructPtr(v reflect.Value) bool {
+	return isValueInterface(v) && isValueStructPtr(v.Elem())
 }
 
-// IsStructValueWithNFields returns true if the reflect.Value representing a
+// isStructValueWithNFields returns true if the reflect.Value representing a
 // struct v has n fields.
-func IsStructValueWithNFields(v reflect.Value, n int) bool {
-	return IsValueStruct(v) && v.NumField() == n
+func isStructValueWithNFields(v reflect.Value, n int) bool {
+	return isValueStruct(v) && v.NumField() == n
 }
 
-// IsSimpleType - true if built-in simple variable type
-func IsSimpleType(t reflect.Type) bool {
+// isSimpleType - true if built-in simple variable type
+func isSimpleType(t reflect.Type) bool {
 	switch t.Kind() {
 	case reflect.Ptr:
-		return IsSimpleType(t.Elem())
+		return isSimpleType(t.Elem())
 	case reflect.Array, reflect.Chan, reflect.Func, reflect.Interface,
 		reflect.Map, reflect.Slice, reflect.Struct,
 		reflect.UnsafePointer, reflect.Complex64, reflect.Complex128:
@@ -211,88 +211,83 @@ func IsSimpleType(t reflect.Type) bool {
 	}
 }
 
-var maxValueStrLen = 150
+var maxValueStringLen = 150
 
-// ValueStrDebug returns "<not calculated>" if the package global variable
-// debugLibrary is not set. Otherwise, it is the same as ValueStr.
-// Use this function instead of ValueStr for debugging purpose, e.g. when the
-// output is passed to DbgPrint, because ValueStr calls can be the bottleneck
-// for large input.
-func ValueStrDebug(value interface{}) string {
-	return ValueStr(value)
-}
-
-// ValueStr returns a string representation of value which may be a value, ptr,
+// ValueString returns a string representation of value which may be a value, ptr,
 // or struct type.
-func ValueStr(value interface{}) string {
-	out := valueStrInternal(value)
-	if len(out) > maxValueStrLen {
-		out = out[:maxValueStrLen] + "..."
+func ValueString(value interface{}) string {
+	v := reflect.ValueOf(value)
+	out := valueString(v, 0)
+	if len(out) > maxValueStringLen {
+		out = out[:maxValueStringLen] + "..."
 	}
 	return out
 }
 
-// ValueStrInternal is the internal implementation of ValueStr.
-func valueStrInternal(value interface{}) string {
-	v := reflect.ValueOf(value)
-	kind := v.Kind()
-	switch kind {
+// ValueStrInternal is the internal implementation of ValueString.
+func valueString(v reflect.Value, ptrcnt int) string {
+	var out string
+	if isNilOrInvalidValue(v) {
+		return "?{?}"
+	}
+	// ylog.Debug("v:", v)
+	switch v.Kind() {
 	case reflect.Ptr:
-		if v.IsNil() || !v.IsValid() {
-			return "nil"
-		}
-		return strings.Replace(ValueStr(v.Elem().Interface()), ")", " ptr)", -1)
+		ptrcnt++
+		out = "*" + valueString(v.Elem(), ptrcnt)
 	case reflect.Slice:
-		var out string
+		out = fmt.Sprintf("%s{", v.Type())
 		for i := 0; i < v.Len(); i++ {
 			if i != 0 {
-				out += ", "
+				out += ","
 			}
-			out += ValueStr(v.Index(i).Interface())
+			out += ValueString(v.Index(i).Interface())
 		}
-		return "[ " + out + " ]"
+		out += "}"
 	case reflect.Struct:
-		var out string
+		comma := false
+		t := v.Type()
+		out = fmt.Sprintf("%s{", v.Type())
 		for i := 0; i < v.NumField(); i++ {
-			if i != 0 {
-				out += ", "
+			fv := v.Field(i)
+			ft := t.Field(i)
+			if comma {
+				out += ","
 			}
-			if !v.Field(i).CanInterface() {
-				continue
+			if v.Field(i).CanInterface() {
+				out += fmt.Sprintf("%s:%v", ft.Name, ValueString(v.Field(i).Interface()))
+			} else {
+				out += fmt.Sprintf("%s:%v", ft.Name, fv)
 			}
-			out += ValueStr(v.Field(i).Interface())
+			comma = true
 		}
-		return "{ " + out + " }"
+		out += "}"
+	case reflect.Map:
+		comma := false
+		out = fmt.Sprintf("%s{", v.Type())
+		iter := v.MapRange()
+		for iter.Next() {
+			k := iter.Key()
+			e := iter.Value()
+			if comma {
+				out += ","
+			}
+			out += fmt.Sprintf("%v:%s", k, ValueString(e.Interface()))
+			comma = true
+		}
+		out += "}"
+	default:
+		out = fmt.Sprintf("%s{", v.Type())
+		for i := 0; i < ptrcnt; i++ {
+			out = out + "&"
+		}
+		out = out + fmt.Sprintf("%v}", v)
 	}
-	out := fmt.Sprintf("%v (%v)", value, kind)
-	if len(out) > maxValueStrLen {
-		out = out[:maxValueStrLen] + "..."
+	if len(out) > maxValueStringLen {
+		out = out[:maxValueStringLen] + "..."
 	}
 	return out
 }
-
-func printValue(v reflect.Value, ptrcnt int) string {
-	if IsNilOrInvalidValue(v) {
-		return "(???)"
-	}
-	if IsValuePtr(v) {
-		ptrcnt++
-		return "*" + printValue(v.Elem(), ptrcnt)
-	}
-	s := fmt.Sprintf("%s(", v.Type())
-	for i := 0; i < ptrcnt; i++ {
-		s = s + "&"
-	}
-	s = s + fmt.Sprintf("%v)", v)
-	return s
-}
-
-// PrintValue writes the value type and value to a string
-func PrintValue(value interface{}) string {
-	v := reflect.ValueOf(value)
-	return printValue(v, 0)
-}
-
 
 func setMapValue(mv reflect.Value, key interface{}, value interface{}) error {
 	if mv.Kind() == reflect.Ptr {
@@ -317,7 +312,6 @@ func setSliceValue(sv reflect.Value, element interface{}) reflect.Value {
 		if st.Elem().Kind() == reflect.Slice {
 			et := st.Elem().Elem()
 			ev := newValue(et, element)
-			ylog.Debug("::", ev)
 			sv.Elem().Set(reflect.Append(sv.Elem(), ev))
 			return sv
 		} else if st.Elem().Kind() == reflect.Ptr {
@@ -346,7 +340,7 @@ func setValueScalar(v reflect.Value, value interface{}) error {
 		if dv.Kind() == reflect.Ptr {
 			if dv.IsNil() { // e.g. **type
 				dv = reflect.New(dv.Type().Elem())
-				ylog.Debug(PrintValue(dv.Interface()))
+				// ylog.Debug(ValueString(dv.Interface()))
 				v.Elem().Set(dv)
 			}
 			return setValueScalar(dv, value)
@@ -383,7 +377,7 @@ func setValueScalar(v reflect.Value, value interface{}) error {
 					return err
 				}
 				if dv.OverflowInt(val) {
-					return fmt.Errorf("overflowInt: %s", PrintValue(val))
+					return fmt.Errorf("overflowInt: %s", ValueString(val))
 				}
 				dv.SetInt(val)
 			}
@@ -397,7 +391,7 @@ func setValueScalar(v reflect.Value, value interface{}) error {
 					return err
 				}
 				if dv.OverflowUint(val) {
-					return fmt.Errorf("OverflowUint: %s", PrintValue(val))
+					return fmt.Errorf("OverflowUint: %s", ValueString(val))
 				}
 				dv.SetUint(val)
 			}
@@ -411,7 +405,7 @@ func setValueScalar(v reflect.Value, value interface{}) error {
 					return err
 				}
 				if dv.OverflowFloat(val) {
-					return fmt.Errorf("OverflowFloat: %s", PrintValue(val))
+					return fmt.Errorf("OverflowFloat: %s", ValueString(val))
 				}
 				dv.SetFloat(val)
 			}
@@ -493,18 +487,81 @@ func setValueScalar(v reflect.Value, value interface{}) error {
 		dv.Set(sv.Convert(dt))
 		return nil
 	}
-	return fmt.Errorf("Not Convertible: %s", PrintValue(v.Interface()))
+	return fmt.Errorf("Not Convertible: %s", ValueString(v.Interface()))
+}
+
+
+func getStructFieldName(ft reflect.StructField) (string, string) {
+	prefix := ""
+	name := ft.Name
+	tag := ft.Tag.Get("json")
+
+	if tag != "" {
+		name = tag
+	}
+	tag = ft.Tag.Get("yaml")
+	if tag != "" {
+		name = tag
+	}
+	tag = ft.Tag.Get("path")
+	if tag != "" {
+		name = tag
+	}
+	prefix = ft.Tag.Get("module")
+	return prefix, name
+}
+
+func searchStructField(st reflect.Type, sv reflect.Value, name string) (reflect.StructField, reflect.Value, bool) {
+	var fv reflect.Value
+	ft, ok := st.FieldByName(name)
+	if ok {
+		fv = sv.FieldByName(name)
+		return ft, fv, true
+	}
+
+	for i := 0; i < sv.NumField(); i++ {
+		fv := sv.Field(i)
+		ft := st.Field(i)
+		if !fv.IsValid() || !fv.CanSet() {
+			continue
+		}
+		_, name := getStructFieldName(ft)
+		if name != "" {
+			return ft, fv, true
+		}
+	}
+	return ft, reflect.Value{}, false
+}
+
+func setStructField(sv reflect.Value, fieldName interface{}, fieldValue interface{}) error {
+	if sv.Kind() == reflect.Ptr {
+		if sv.IsNil() {
+			cv := newValueStruct(sv.Type())
+			sv.Set(cv)
+		} else {
+			return setStructField(sv.Elem(), fieldName, fieldValue)
+		}
+	}
+	fieldname := reflect.TypeOf("")
+	kv := newValue(fieldname, fieldName)
+	ft, fv, ok := searchStructField(sv.Type(), sv, kv.Interface().(string))
+	// ylog.Debug(ft, fv, ok)
+	if !ok {
+		return fmt.Errorf("not found %s.%s", sv.Type(), fieldname)
+	}
+	nv := NewValue(ft.Type, fieldValue)
+	fv.Set(nv)
+	return nil
 }
 
 func newValueStruct(t reflect.Type) reflect.Value {
-	pv := reflect.New(t)
-	pt := reflect.PtrTo(t)
-	ylog.Debug(pv, pt)
-	if pv.Elem().Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Ptr {
 		cv := newValueStruct(t.Elem())
-		pv.Elem().Set(cv)
+		pv := newPtrOfValue(cv)
 		return pv
 	}
+
+	pv := reflect.New(t)
 	pve := pv.Elem()
 	for i := 0; i < pve.NumField(); i++ {
 		fv := pve.Field(i)
@@ -522,14 +579,15 @@ func newValueStruct(t reflect.Type) reflect.Value {
 			fv.Set(reflect.MakeChan(ft.Type, 0))
 		case reflect.Struct:
 			srv := newValueStruct(ft.Type)
-			if !IsNilOrInvalidValue(srv) {
+			if !isNilOrInvalidValue(srv) {
 				fv.Set(srv)
 			}
 		case reflect.Ptr:
-			ylog.Debug(ft.Name)
+			// ylog.Debug(ft.Name, ft.Type)
 			srv := newValue(ft.Type, nil)
-			if !IsNilOrInvalidValue(srv) {
-				fv.Set(srv.Elem())
+			// ylog.Debug(fv, srv)
+			if !isNilOrInvalidValue(srv) {
+				fv.Set(srv)
 			}
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			fv.SetInt(0)
@@ -549,9 +607,8 @@ func newValueStruct(t reflect.Type) reflect.Value {
 
 func newValueMap(t reflect.Type) reflect.Value {
 	if t.Kind() == reflect.Ptr {
-		pv := reflect.New(t)
 		cv := newValueMap(t.Elem())
-		pv.Elem().Set(cv)
+		pv := newPtrOfValue(cv)
 		return pv
 	}
 	return reflect.MakeMap(t)
@@ -559,20 +616,17 @@ func newValueMap(t reflect.Type) reflect.Value {
 
 func newValueSlice(t reflect.Type) reflect.Value {
 	if t.Kind() == reflect.Ptr {
-		pv := reflect.New(t)
 		cv := newValueSlice(t.Elem())
-		pv.Elem().Set(cv)
+		pv := newPtrOfValue(cv)
 		return pv
 	}
 	return reflect.MakeSlice(t, 0, 0)
 }
 
-
 func newValueChan(t reflect.Type) reflect.Value {
 	if t.Kind() == reflect.Ptr {
-		pv := reflect.New(t)
 		cv := newValueChan(t.Elem())
-		pv.Elem().Set(cv)
+		pv := newPtrOfValue(cv)
 		return pv
 	}
 	return reflect.MakeChan(t, 0)
@@ -601,7 +655,6 @@ func newValueScalar(t reflect.Type) reflect.Value {
 	return pve
 }
 
-
 // return new ptr variable of the t type. e.g. T ==> *T
 // key is just used for map type data.
 // value is used for the base value of the created variable.
@@ -609,22 +662,22 @@ func newValue(t reflect.Type, value interface{}) reflect.Value {
 	if t == reflect.TypeOf(nil) {
 		return reflect.Value{}
 	}
-	pt := GetPureType(t)
-	if IsTypeStruct(pt) {
+	pt := getBaseType(t)
+	if isTypeStruct(pt) {
 		return newValueStruct(t)
-	} else if IsTypeMap(pt) {
+	} else if isTypeMap(pt) {
 		return newValueMap(t)
-	} else if IsTypeSlice(pt) {
+	} else if isTypeSlice(pt) {
 		nv := newValueSlice(t)
-		if value != nil || !IsNilOrInvalidValue(reflect.ValueOf(value)) {
+		if value != nil || !isNilOrInvalidValue(reflect.ValueOf(value)) {
 			nv = setSliceValue(nv, value)
 		}
 		return nv
-	} else if IsTypeChan(pt) {
+	} else if isTypeChan(pt) {
 		return newValueChan(t)
 	} else {
 		v := newValueScalar(t)
-		if IsValueNil(value) {
+		if isValueNil(value) {
 			return v
 		}
 		setValueScalar(v, value)
@@ -640,59 +693,53 @@ func newPtrOfValue(v reflect.Value) reflect.Value {
 	return pv
 }
 
-// NewValue creates an variable of the value based on the type of the typRef.
-func NewValue(typRef interface{}, value interface{}) interface{} {
-	// v := reflect.ValueOf(value)
-	// if IsNilOrInvalidValue(v) {
-	// 	return nil
-	// }
-	nv := newValue(reflect.TypeOf(typRef), value)
-	if nv.IsValid() {
-		return nv.Interface()
+// NewValue - returns new Value based on t type
+func NewValue(t reflect.Type, values ...interface{}) reflect.Value {
+	if t == reflect.TypeOf(nil) {
+		return reflect.Value{}
 	}
-	return nil
+	pt := getBaseType(t)
+	switch pt.Kind() {
+	case reflect.Array, reflect.Complex64, reflect.Complex128, reflect.Chan:
+		return reflect.Value{}
+	case reflect.Struct:
+		var k interface{} = nil
+		nv := newValueStruct(t)
+		for _, v := range values {
+			if k == nil {
+				k = v
+			} else {
+				setStructField(nv, k, v)
+				k = nil
+			}
+		}
+		return nv
+	case reflect.Map:
+		var k interface{} = nil
+		nv := newValueMap(t)
+		for _, v := range values {
+			if k == nil {
+				k = v
+			} else {
+				setMapValue(nv, k, v)
+				k = nil
+			}
+		}
+		return nv
+	case reflect.Slice:
+		nv := newValueSlice(t)
+		for _, v := range values {
+			nv = setSliceValue(nv, v)
+		}
+		return nv
+	default:
+		nv := newValueScalar(t)
+		for _, v := range values {
+			err:= setValueScalar(nv, v)
+			if err != nil {
+				ylog.Warningf("SetValue from %T to %s", v, t)
+			}
+		}
+		return nv
+	}
 }
-
-// SetScalarValue sets the value based on source.
-func SetScalarValue(target interface{}, value interface{}) error {
-	v := reflect.ValueOf(target)
-	if IsNilOrInvalidValue(v) {
-		return fmt.Errorf("nil or invalid:: %s", PrintValue(target))
-	}
-	if !IsValuePtr(v) {
-		return fmt.Errorf("no ptr :: %s", PrintValue(target))
-	}
-	if IsValueStruct(v) || IsValueMap(v) || IsValueSlice(v) {
-		return fmt.Errorf("no scalar value :: %s", PrintValue(target))
-	}
-	return setValueScalar(v, value)
-}
-
-// SetMapValue sets the value based on source.
-func SetMapValue(target interface{}, key interface{}, value interface{}) error {
-	t := reflect.TypeOf(target)
-	v := reflect.ValueOf(target)
-	if IsValueNil(target) {
-		return fmt.Errorf("nil map :: %s", PrintValue(target))
-	}
-	ylog.Debug("T", t)
-	if IsTypeDeep(t, reflect.Map) {
-		return setMapValue(v, key, value)
-	}
-	return fmt.Errorf("no map :: %s", PrintValue(target))
-}
-
-// SetSliceValue sets the value based on source.
-func SetSliceValue(target interface{}, value interface{}) interface{} {
-	t := reflect.TypeOf(target)
-	v := reflect.ValueOf(target)
-	if IsValueNil(target) {
-		return nil
-	}
-	if IsTypeDeep(t, reflect.Slice) {
-		nv := setSliceValue(v, value)
-		return nv.Interface()
-	}
-	return nil
-}
-
