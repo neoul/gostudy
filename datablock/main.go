@@ -18,6 +18,9 @@ func main() {
 	ylog := log.NewLog("main", os.Stdout)
 	out = yref.NewValue(reflect.TypeOf(i), 10)
 	ylog.Debug(yref.ValueString(out.Interface()))
+	out = yref.NewValue(reflect.TypeOf(&i), 10)
+	ylog.Debug(yref.ValueString(out.Interface()))
+
 	out = yref.NewValue(reflect.TypeOf(ii), 20)
 	ylog.Debug(yref.ValueString(out.Interface()))
 	out = yref.NewValue(reflect.TypeOf(iii), 30)
@@ -27,7 +30,8 @@ func main() {
 	var ssi *[]int
 	var ssii *[]*int
 	out = yref.NewValue(reflect.TypeOf(si), 10, 20, 30)
-	ylog.Debug(yref.ValueString(out.Interface()))
+	si = out.Interface().([]int)
+	ylog.Debug(yref.ValueString(si))
 	out = yref.NewValue(reflect.TypeOf(ssi), 10, 20, 30)
 	ylog.Debug(yref.ValueString(out.Interface()))
 	out = yref.NewValue(reflect.TypeOf(ssii), 10, 20, 30)
@@ -51,6 +55,63 @@ func main() {
 	var sti structi
 	out = yref.NewValue(reflect.TypeOf(sti))
 	ylog.Debug(yref.ValueString(out.Interface()))
-	out = yref.NewValue(reflect.TypeOf(sti), "I", "10", "II", 20, "III", "10")
+	ylog.Debug("???")
+	iim := make(map[string]string)
+	iim["10"] = "11"
+	out = yref.NewValue(reflect.TypeOf(sti), "I", "10", "II", 20, "III", iim)
+	ylog.Debug("???")
 	ylog.Debug(yref.ValueString(out.Interface()))
+
+	ylog.Debug("")
+	ylog.Debug("[SetValue(value)]")
+	ylog.Debug("")
+	
+	out = yref.SetValue(reflect.ValueOf(i), 1000)
+	ylog.Debug("in ", yref.ValueString(i))
+	ylog.Debug("out", yref.ValueString(out.Interface()))
+
+	out = yref.SetValue(reflect.ValueOf(&i), 2000)
+	ylog.Debug("in ", yref.ValueString(i))
+	ylog.Debug("out", yref.ValueString(out.Interface()))
+
+	ylog.Debug("")
+	ylog.Debug("[SetValue(slice)]")
+	out = yref.SetValue(reflect.ValueOf(si), 1000)
+	ylog.Debug("in : si", yref.ValueString(si))
+	ylog.Debug("out: si", yref.ValueString(out.Interface()))
+	
+	out = yref.SetValue(reflect.ValueOf(&si), 2000)
+	ylog.Debug("in : &si", yref.ValueString(&si))
+	ylog.Debug("out: &si", yref.ValueString(out.Interface()))
+	
+	ylog.Debug("")
+	// ssi = &si
+	out = yref.SetValue(reflect.ValueOf(ssi), 3000)
+	ylog.Debug("in : ssi", yref.ValueString(ssi))
+	ylog.Debug("out: ssi", yref.ValueString(out.Interface()))
+
+	out = yref.SetValue(reflect.ValueOf(&ssi), 4000)
+	ylog.Debug("in : ssi", yref.ValueString(&ssi))
+	ylog.Debug("out: ssi", yref.ValueString(out.Interface()))
+
+	out = yref.SetValue(reflect.ValueOf(ssii), 5000, 6000)
+	ylog.Debug("in : ssii", yref.ValueString(ssii))
+	ylog.Debug("out: ssii", yref.ValueString(out.Interface()))
+	
+	out = yref.SetValue(reflect.ValueOf(&ssii), 7000, 8000)
+	ylog.Debug("in : ssii", yref.ValueString(&ssii))
+	ylog.Debug("out: ssii", yref.ValueString(out.Interface()))
+
+	// ssi = &si
+	// out = yref.SetValue(reflect.ValueOf(ssi), 3000)
+	// ylog.Debug("in : ssi", yref.ValueString(ssi))
+	// ylog.Debug("out: ssi", yref.ValueString(out.Interface()))
+
+	// out = yref.SetValue(reflect.ValueOf(&ssi), 4000)
+	// ylog.Debug("in : ssi", yref.ValueString(&ssi))
+	// ylog.Debug("out: ssi", yref.ValueString(out.Interface()))
+
+	// out = yref.SetValue(reflect.ValueOf(mi), 10, 20, 30, 40)
+	// ylog.Debug("in : mi", yref.ValueString(mi))
+	// ylog.Debug("out: mi", yref.ValueString(out.Interface()))
 }

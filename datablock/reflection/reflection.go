@@ -104,6 +104,14 @@ func isTypeChan(t reflect.Type) bool {
 	return t.Kind() == reflect.Chan
 }
 
+// AreSameType returns true if t1 and t2 has the same reflect.Type,
+// otherwise it returns false.
+func AreSameType(t1 reflect.Type, t2 reflect.Type) bool {
+	b1 := getBaseType(t1)
+	b2 := getBaseType(t2)
+	return b1 == b2
+}
+
 // isNilOrInvalidValue reports whether v is nil or reflect.Zero.
 func isNilOrInvalidValue(v reflect.Value) bool {
 	return !v.IsValid() || (v.Kind() == reflect.Ptr && v.IsNil()) || isValueNil(v.Interface())
@@ -179,11 +187,6 @@ func isValueScalar(v reflect.Value) bool {
 	return !isValueStruct(v) && !isValueMap(v) && !isValueSlice(v)
 }
 
-// valuesAreSameType returns true if v1 and v2 has the same reflect.Type,
-// otherwise it returns false.
-func valuesAreSameType(v1 reflect.Value, v2 reflect.Value) bool {
-	return v1.Type() == v2.Type()
-}
 
 // isValueInterfaceToStructPtr reports whether v is an interface that contains a
 // pointer to a struct.
@@ -211,6 +214,29 @@ func isSimpleType(t reflect.Type) bool {
 	}
 }
 
+// isValidDeep reports whether v is valid.
+func isValidDeep(v reflect.Value) bool {
+	for ; v.Kind() == reflect.Ptr; v = v.Elem() {
+		if !v.IsValid() {
+			return false
+		}
+	}
+	if !v.IsValid() {
+		return false
+	}
+	return true
+}
+
+// isNilDeep reports whether v is nil
+func isNilDeep(v reflect.Value) bool {
+	for ; v.Kind() == reflect.Ptr; v = v.Elem() {
+		if v.IsNil() {
+			return true
+		}
+	}
+	return false
+}
+
 var maxValueStringLen = 150
 
 // ValueString returns a string representation of value which may be a value, ptr,
@@ -228,7 +254,7 @@ func ValueString(value interface{}) string {
 func valueString(v reflect.Value, ptrcnt int) string {
 	var out string
 	if isNilOrInvalidValue(v) {
-		return "?{?}"
+		return fmt.Sprintf("%s{?}", v.Type())
 	}
 	// ylog.Debug("v:", v)
 	switch v.Kind() {
@@ -251,11 +277,15 @@ func valueString(v reflect.Value, ptrcnt int) string {
 		for i := 0; i < v.NumField(); i++ {
 			fv := v.Field(i)
 			ft := t.Field(i)
+			ylog.Debug(ft.Name, v.Type(), ft.Type)
+			if AreSameType(ft.Type, t) {
+				continue
+			}
 			if comma {
 				out += ","
 			}
-			if v.Field(i).CanInterface() {
-				out += fmt.Sprintf("%s:%v", ft.Name, ValueString(v.Field(i).Interface()))
+			if fv.CanInterface() {
+				out += fmt.Sprintf("%s:%v", ft.Name, ValueString(fv.Interface()))
 			} else {
 				out += fmt.Sprintf("%s:%v", ft.Name, fv)
 			}
@@ -309,27 +339,45 @@ func setMapValue(mv reflect.Value, key interface{}, value interface{}) error {
 func setSliceValue(sv reflect.Value, element interface{}) reflect.Value {
 	st := sv.Type()
 	if st.Kind() == reflect.Ptr {
+		if st.Elem().Kind() == reflect.Ptr {
+			nv := setSliceValue(sv.Elem(), element)
+			sv.Elem().Set(nv)
+			return sv
+		} 
 		if st.Elem().Kind() == reflect.Slice {
 			et := st.Elem().Elem()
 			ev := newValue(et, element)
 			sv.Elem().Set(reflect.Append(sv.Elem(), ev))
+			// ylog.Info("sv Slice:::::", sv)
 			return sv
-		} else if st.Elem().Kind() == reflect.Ptr {
-			return setSliceValue(sv.Elem(), element)
-		} else {
 		}
-		// if sv.IsNil() {
-		// 	cv := newValueSlice(sv.Type())
-		// 	sv.Set(cv)
-		// } else {
-		// 	return setSliceValue(sv.Elem(), element)
-		// }
 	}
 	ev := newValue(st.Elem(), element)
 	num := sv.Len()
 	nslice := reflect.MakeSlice(st, num+1, num+1)
 	reflect.Copy(nslice, sv)
 	nslice.Index(num).Set(ev)
+	return nslice
+}
+
+func copySliceValue(v reflect.Value) reflect.Value {
+	sv := v
+	st := sv.Type()
+	if st.Kind() == reflect.Ptr {
+		if st.Elem().Kind() == reflect.Ptr {
+			cv := copySliceValue(sv.Elem())
+			pv := newPtrOfValue(cv)
+			return pv
+		}
+		sv = sv.Elem()
+		st = st.Elem()
+	}
+	num := sv.Len()
+	nslice := reflect.MakeSlice(st, num, num)
+	reflect.Copy(nslice, sv)
+	if sv != v {
+		return newPtrOfValue(nslice)
+	}
 	return nslice
 }
 
@@ -545,7 +593,7 @@ func setStructField(sv reflect.Value, fieldName interface{}, fieldValue interfac
 	fieldname := reflect.TypeOf("")
 	kv := newValue(fieldname, fieldName)
 	ft, fv, ok := searchStructField(sv.Type(), sv, kv.Interface().(string))
-	// ylog.Debug(ft, fv, ok)
+	ylog.Debug(ft, fv, ok)
 	if !ok {
 		return fmt.Errorf("not found %s.%s", sv.Type(), fieldname)
 	}
@@ -703,41 +751,116 @@ func NewValue(t reflect.Type, values ...interface{}) reflect.Value {
 	case reflect.Array, reflect.Complex64, reflect.Complex128, reflect.Chan:
 		return reflect.Value{}
 	case reflect.Struct:
-		var k interface{} = nil
+		var key interface{} = nil
 		nv := newValueStruct(t)
-		for _, v := range values {
-			if k == nil {
-				k = v
+		for _, val := range values {
+			if key == nil {
+				key = val
 			} else {
-				setStructField(nv, k, v)
-				k = nil
+				ylog.Info(key, val)
+				setStructField(nv, key, val)
+				key = nil
 			}
+		}
+		if key != nil {
+			ylog.Warningf("Single key value ignored '%v:none'", key)
 		}
 		return nv
 	case reflect.Map:
-		var k interface{} = nil
+		var key interface{} = nil
 		nv := newValueMap(t)
-		for _, v := range values {
-			if k == nil {
-				k = v
+		for _, val := range values {
+			if key == nil {
+				key = val
 			} else {
-				setMapValue(nv, k, v)
-				k = nil
+				setMapValue(nv, key, val)
+				key = nil
 			}
+		}
+		if key != nil {
+			ylog.Warningf("Single key value ignored '%v:none'", key)
 		}
 		return nv
 	case reflect.Slice:
 		nv := newValueSlice(t)
-		for _, v := range values {
-			nv = setSliceValue(nv, v)
+		for _, val := range values {
+			nv = setSliceValue(nv, val)
 		}
 		return nv
 	default:
 		nv := newValueScalar(t)
-		for _, v := range values {
-			err:= setValueScalar(nv, v)
+		for _, val := range values {
+			err:= setValueScalar(nv, val)
 			if err != nil {
-				ylog.Warningf("SetValue from %T to %s", v, t)
+				ylog.Warningf("Not settable value inserted '%s'", ValueString(val))
+			}
+		}
+		return nv
+	}
+}
+
+
+// SetValue - returns new Value based on t type
+func SetValue(v reflect.Value, values ...interface{}) reflect.Value {
+	if !v.IsValid() {
+		return v
+	}
+
+	t := v.Type()
+	pt := getBaseType(t)
+	switch pt.Kind() {
+	case reflect.Array, reflect.Complex64, reflect.Complex128, reflect.Chan:
+		return v
+	case reflect.Struct:
+		var key interface{} = nil
+		for _, val := range values {
+			if key == nil {
+				key = val
+			} else {
+				setStructField(v, key, val)
+				key = nil
+			}
+		}
+		return v
+	case reflect.Map:
+		var key interface{} = nil
+		for _, val := range values {
+			if key == nil {
+				key = val
+			} else {
+				setMapValue(v, key, val)
+				key = nil
+			}
+		}
+		return v
+	case reflect.Slice:
+		var nv reflect.Value
+		isnil := isNilDeep(v)
+		if isnil {
+			nv = newValueSlice(t)
+		} else {
+			nv = copySliceValue(v)
+		}
+		for _, val := range values {
+			nv = setSliceValue(nv, val)
+		}
+		if t.Kind() == reflect.Ptr {
+			if v.Elem().CanSet() {
+				v.Elem().Set(nv.Elem())
+			} else {
+				ylog.Warningf("Not settable variable '%s'", ValueString(v.Interface()))
+			}
+		}
+		return nv
+	default:
+		nv := v
+		if t.Kind() != reflect.Ptr {
+			nv = newValueScalar(t)
+		}
+		for _, val := range values {
+			err:= setValueScalar(nv, val)
+			if err != nil {
+				ylog.Warningf("Not settable value inserted '%s'", ValueString(val))
 			}
 		}
 		return nv
