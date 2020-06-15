@@ -112,14 +112,14 @@ func AreSameType(t1 reflect.Type, t2 reflect.Type) bool {
 	return b1 == b2
 }
 
-// isNilOrInvalidValue reports whether v is nil or reflect.Zero.
-func isNilOrInvalidValue(v reflect.Value) bool {
-	return !v.IsValid() || (v.Kind() == reflect.Ptr && v.IsNil()) || isValueNil(v.Interface())
+// IsNilOrInvalidValue reports whether v is nil or reflect.Zero.
+func IsNilOrInvalidValue(v reflect.Value) bool {
+	return !v.IsValid() || (v.Kind() == reflect.Ptr && v.IsNil()) || IsValueNil(v.Interface())
 }
 
-// isValueNil returns true if either value is nil, or has dynamic type {ptr,
+// IsValueNil returns true if either value is nil, or has dynamic type {ptr,
 // map, slice} with value nil.
-func isValueNil(value interface{}) bool {
+func IsValueNil(value interface{}) bool {
 	if value == nil {
 		return true
 	}
@@ -130,10 +130,10 @@ func isValueNil(value interface{}) bool {
 	return false
 }
 
-// isValueNilOrDefault returns true if either isValueNil(value) or the default
+// IsValueNilOrDefault returns true if either IsValueNil(value) or the default
 // value for the type.
-func isValueNilOrDefault(value interface{}) bool {
-	if isValueNil(value) {
+func IsValueNilOrDefault(value interface{}) bool {
+	if IsValueNil(value) {
 		return true
 	}
 	if !isValueScalar(reflect.ValueOf(value)) {
@@ -175,7 +175,7 @@ func isValueSlice(v reflect.Value) bool {
 
 // isValueScalar reports whether v is a scalar type.
 func isValueScalar(v reflect.Value) bool {
-	if isNilOrInvalidValue(v) {
+	if IsNilOrInvalidValue(v) {
 		return false
 	}
 	if isValuePtr(v) {
@@ -186,7 +186,6 @@ func isValueScalar(v reflect.Value) bool {
 	}
 	return !isValueStruct(v) && !isValueMap(v) && !isValueSlice(v)
 }
-
 
 // isValueInterfaceToStructPtr reports whether v is an interface that contains a
 // pointer to a struct.
@@ -253,7 +252,7 @@ func ValueString(value interface{}) string {
 // ValueStrInternal is the internal implementation of ValueString.
 func valueString(v reflect.Value, ptrcnt int) string {
 	var out string
-	if isNilOrInvalidValue(v) {
+	if IsNilOrInvalidValue(v) {
 		return fmt.Sprintf("%s{?}", v.Type())
 	}
 	// ylog.Debug("v:", v)
@@ -343,7 +342,7 @@ func setSliceValue(sv reflect.Value, element interface{}) reflect.Value {
 			nv := setSliceValue(sv.Elem(), element)
 			sv.Elem().Set(nv)
 			return sv
-		} 
+		}
 		if st.Elem().Kind() == reflect.Slice {
 			et := st.Elem().Elem()
 			ev := newValue(et, element)
@@ -538,7 +537,6 @@ func setValueScalar(v reflect.Value, value interface{}) error {
 	return fmt.Errorf("Not Convertible: %s", ValueString(v.Interface()))
 }
 
-
 func getStructFieldName(ft reflect.StructField) (string, string) {
 	prefix := ""
 	name := ft.Name
@@ -627,14 +625,14 @@ func newValueStruct(t reflect.Type) reflect.Value {
 			fv.Set(reflect.MakeChan(ft.Type, 0))
 		case reflect.Struct:
 			srv := newValueStruct(ft.Type)
-			if !isNilOrInvalidValue(srv) {
+			if !IsNilOrInvalidValue(srv) {
 				fv.Set(srv)
 			}
 		case reflect.Ptr:
 			// ylog.Debug(ft.Name, ft.Type)
 			srv := newValue(ft.Type, nil)
 			// ylog.Debug(fv, srv)
-			if !isNilOrInvalidValue(srv) {
+			if !IsNilOrInvalidValue(srv) {
 				fv.Set(srv)
 			}
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -717,7 +715,7 @@ func newValue(t reflect.Type, value interface{}) reflect.Value {
 		return newValueMap(t)
 	} else if isTypeSlice(pt) {
 		nv := newValueSlice(t)
-		if value != nil || !isNilOrInvalidValue(reflect.ValueOf(value)) {
+		if value != nil || !IsNilOrInvalidValue(reflect.ValueOf(value)) {
 			nv = setSliceValue(nv, value)
 		}
 		return nv
@@ -725,7 +723,7 @@ func newValue(t reflect.Type, value interface{}) reflect.Value {
 		return newValueChan(t)
 	} else {
 		v := newValueScalar(t)
-		if isValueNil(value) {
+		if IsValueNil(value) {
 			return v
 		}
 		setValueScalar(v, value)
@@ -790,7 +788,7 @@ func NewValue(t reflect.Type, values ...interface{}) reflect.Value {
 	default:
 		nv := newValueScalar(t)
 		for _, val := range values {
-			err:= setValueScalar(nv, val)
+			err := setValueScalar(nv, val)
 			if err != nil {
 				ylog.Warningf("Not settable value inserted '%s'", ValueString(val))
 			}
@@ -798,7 +796,6 @@ func NewValue(t reflect.Type, values ...interface{}) reflect.Value {
 		return nv
 	}
 }
-
 
 // SetValue - returns new Value based on t type
 func SetValue(v reflect.Value, values ...interface{}) reflect.Value {
@@ -858,7 +855,7 @@ func SetValue(v reflect.Value, values ...interface{}) reflect.Value {
 			nv = newValueScalar(t)
 		}
 		for _, val := range values {
-			err:= setValueScalar(nv, val)
+			err := setValueScalar(nv, val)
 			if err != nil {
 				ylog.Warningf("Not settable value inserted '%s'", ValueString(val))
 			}
