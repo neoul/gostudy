@@ -54,7 +54,8 @@ func main() {
 		"name": ["gopher", "zebra"]
 	}`
 	// var zoo []Animal
-	var zoo map[interface{}]interface{}
+	// var zoo map[interface{}]interface{}
+	var zoo map[string]interface{}
 	if err := json.Unmarshal([]byte(blob), &zoo); err != nil {
 		log.Fatal(err)
 	}

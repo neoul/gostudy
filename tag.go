@@ -20,4 +20,9 @@ func main() {
 	fmt.Println(f4.Tag) // f four and five
 	f5, _ := t.FieldByName("f5")
 	fmt.Println(f5.Tag) // f four and five
+	a := 1
+	v := reflect.ValueOf(a)
+	b := v
+	fmt.Println(reflect.ValueOf(a) == reflect.ValueOf(a))
+	fmt.Println(v == b)
 }
