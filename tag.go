@@ -25,4 +25,11 @@ func main() {
 	b := v
 	fmt.Println(reflect.ValueOf(a) == reflect.ValueOf(a))
 	fmt.Println(v == b)
+
+	x := []string{"1"}
+	x = append(x)
+	x = append(x, []string{}...)
+	fmt.Println(x)
+	y := x[len(x)]
+	fmt.Println(y)
 }

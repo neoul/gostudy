@@ -25,6 +25,7 @@ func WorkerPools() {
 	}
 
 	for j := 1; j <= numJobs*2; j++ {
+		fmt.Println("push job", j)
 		jobs <- j
 	}
 	close(jobs)
