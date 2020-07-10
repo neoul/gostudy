@@ -3,17 +3,18 @@ package main
 import (
 	"fmt"
 
-	"github.com/neoul/gostudy/statements"
+	"github.com/neoul/gostudy/samples"
 )
 
 func main() {
-	statements.Switch1()
-	statements.Switch2()
-	fmt.Println(statements.Switch3('A'))
-	statements.Switch4_goto()
+	samples.Switch1()
+	samples.Switch2()
+	fmt.Println(samples.Switch3('A'))
+	samples.Switch4_goto()
 
-	statements.Timer1()
-	statements.Ticker1()
-	statements.WorkerPools()
-	statements.Select1()
+	samples.Timer1()
+	samples.Ticker1()
+	samples.WorkerPools()
+	samples.Select1()
+
 }

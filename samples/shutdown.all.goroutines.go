@@ -3,7 +3,7 @@
 // on a closed channel does not block.
 // https://www.godesignpatterns.com/2014/04/exiting-multiple-goroutines-simultaneously.html
 
-package statements
+package samples
 
 import (
 	"fmt"

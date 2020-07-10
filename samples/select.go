@@ -1,4 +1,4 @@
-package statements
+package samples
 
 import (
 	"bufio"
