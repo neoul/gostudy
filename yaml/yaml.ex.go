@@ -53,3 +53,24 @@ func main() {
 	}
 	fmt.Printf("--- m dump:\n%s\n\n", string(d))
 }
+
+//sample customized Marshal
+// MarshalYAML function for cEncoding
+// func (c cEncoding) MarshalYAML() (interface{}, error) {
+// 	e := pb.Encoding(c)
+// 	return e.String(), nil
+// }
+
+// // UnmarshalYAML function for cEncoding
+// func (c cEncoding) UnmarshalYAML(unmarshal func(interface{}) error) error {
+// 	var e pb.Encoding
+// 	var estr string
+// 	if err := unmarshal(&estr); err != nil {
+// 		return nil
+// 	}
+
+// 	e = pb.Encoding(pb.Encoding_value[estr])
+// 	c = cEncoding(e)
+// 	fmt.Println("c", c)
+// 	return nil
+// }
